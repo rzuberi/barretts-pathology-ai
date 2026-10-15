@@ -1,0 +1,24 @@
+# This repository holds code and documentation only. Never commit data.
+*.csv
+*.tsv
+*.json
+*.jsonl
+*.npz
+*.npy
+*.h5
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.db
+*.sqlite
+*.xlsx
+*.parquet
+*.svs
+*.tif
+*.tiff
+*.png
+*.pdf
+*.log
+__pycache__/
+.DS_Store

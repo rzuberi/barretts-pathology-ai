@@ -59,7 +59,7 @@ for cls, v in (("P", 1), ("N", 0)):
 yl = bx.get_ylim()[1]
 for v, lab in ((cut["t_low"], f"t_low {cut['t_low']:.3f}"), (cut["c_star"], f"t_high {cut['c_star']:.3f}")): bx.axvline(v, color="black", lw=0.7, ls="--"); bx.text(v + 0.01, yl * 0.97, lab, fontsize=5.8, va="top")
 for b, xc in (("mid", (cut["t_low"] + cut["c_star"]) / 2), ("high", (1 + cut["c_star"]) / 2)): bx.text(xc, yl * 0.82, b, ha="center", fontsize=6, color="#333333")
-bx.text(0.004, yl * 0.82, "low", ha="left", fontsize=6, color="#333333"); bx.set_xlabel("L-IMG score (mean over the 10 repeats)"); bx.set_ylabel("density"); bx.legend(loc="center right", fontsize=5.6); bx.set_xlim(0, 1)
+bx.text(0.004, yl * 0.82, "low", ha="left", fontsize=6, color="#333333"); bx.set_xlabel("L-IMG score (mean over the 10 repeats)"); bx.set_ylabel("density"); bx.legend(loc="upper right", bbox_to_anchor=(1.0, 0.93), fontsize=5.6); bx.set_xlim(0, 1)
 letter(fig, bx, "b", dx=-0.05)
 # ------------------------------------------------------------------ (c)
 cx = fig.add_axes([0.745, 0.33, 0.25, 0.62]); cnv = O["L-CNV"].mean(1)[rows]; src["spearman_within_class"] = {}

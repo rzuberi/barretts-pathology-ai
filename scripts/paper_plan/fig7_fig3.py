@@ -71,7 +71,7 @@ h = [Line2D([], [], marker=d["mk"], color="white", mec="black", mew=0.5, ms=min(
 h.append(Line2D([], [], marker="o", color="white", mec="black", mew=0.3, ms=3, lw=0, label="H&E gate, 9 cut-off settings")); h.append(Line2D([], [], marker="s", color="white", mec="black", mew=0.5, ms=4, lw=0, label="matched A*, B*, C*"))
 bx.legend(handles=h, loc="center left", bbox_to_anchor=(0.0, 0.42), fontsize=4.8, handletextpad=0.3); bx.set_xlabel("share of biopsies sequenced (%)"); bx.set_ylabel("sensitivity (single model, per biopsy)"); bx.set_xlim(-6, 118); bx.set_ylim(0.3, 1.0)
 cax = fig.add_axes([0.655, 0.535, 0.19, 0.012]); cb = mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm, orientation="horizontal"); cb.set_label("specificity (marker colour)", fontsize=6); cb.ax.tick_params(labelsize=5.5)
-letter(fig, bx, "b", dx=-0.06, dy=-0.02)
+letter(fig, bx, "b", dx=-0.095, dy=-0.01)
 src["b_sample_level"] = {k: {kk: v for kk, v in d.items() if kk not in ("mk", "ms")} for k, d in pts.items()}; src["b_grid_cells"] = [{"analysis": r["analysis"], "share": r["share_sequenced"], "sensitivity": r["triage_sens_spec"][0], "specificity": r["triage_sens_spec"][1]} for r in grid]
 # endoscopy level (R41)
 ex_ = fig.add_axes([0.915, 0.60, 0.075, 0.35]); E = r41["levels"]["endoscopy"]; shr = r41["share_sequenced"]
@@ -82,7 +82,7 @@ for k, (x, ks, kp, mk, ms) in ept.items():
     src["b_endoscopy_level"][k.replace("\n", " ")] = {"share": x, "sensitivity": se, "specificity": sp}
 ex_.text(100 * shr["triage_per_repeat_mean"] - 4, E["sens_triage"]["mean_over_seeds"] + 0.03, "triage", fontsize=5.2, ha="right"); ex_.text(100 * shr["random_biopsy"] + 3, E["sens_random_biopsy"]["mean_over_seeds"] - 0.03, "1 random\nbiopsy", fontsize=5.0, va="top")
 ex_.text(100 * shr["random_biopsy"] + 3, E["sens_random_biopsy_rest_HE"]["mean_over_seeds"] + 0.005, "+ H&E\non rest", fontsize=5.0, va="bottom"); ex_.text(97, E["sens_B_all_sequenced"]["mean_over_seeds"] - 0.03, "(B)", fontsize=5.2, ha="right", va="top")
-ex_.set_xlim(30, 112); ex_.set_ylim(0.7, 1.0); ex_.set_xlabel("sequenced (%)", fontsize=6); ex_.set_ylabel("sensitivity per endoscopy", fontsize=6, labelpad=1); ex_.set_title("endoscopy level", fontsize=6, pad=2, loc="right")
+ex_.set_xlim(30, 112); ex_.set_ylim(0.7, 1.0); ex_.set_xlabel("sequenced (%)", fontsize=6); ex_.set_ylabel("sensitivity per endoscopy", fontsize=6, labelpad=1); ex_.set_title("endoscopy level", fontsize=6, pad=8, loc="right")
 # ------------------------------------------------------------------ (c) per-patient outcomes with CIs
 pp = pd.Series(pr_); up = pp.unique(); isP = pd.Series(yr).groupby(pp).max().reindex(up).values == 1; nP, nN = int(isP.sum()), int((~isP).sum())
 def pat_stats(b, tag):   # per draw: per-repeat mean share of progressor patients missed and non-progressor patients flagged (units = patient x tag)
@@ -139,9 +139,9 @@ for i, (c, v, g, bn) in enumerate(keys):
     u10 = float((agree[mk] == 10).mean()); u8 = float((agree[mk] >= 8).mean()); ref = st[c][bn]; assert ref["n"] == tot and abs(ref["unanimous_10_of_10"] - u10) < 0.002, (c, bn, tot, ref, u10)
     ex.plot([100 * u8], [yy - 0.42], marker="D", color="white", mec=MODEL["L-IMG"], mew=0.7, ms=3, lw=0, zorder=4); ex.plot([100 * u10], [yy - 0.42], marker="D", color=MODEL["L-IMG"], ms=3, lw=0, zorder=5)
     ex.text(102, yy, f"n {tot}", fontsize=5.4, va="center", clip_on=False); src["band_stability"][f"{c}_{bn}"] = {"n": tot, "repeats_in_modal_band": dist, "voted_call_unanimous_10_of_10": u10, "voted_call_ge_8_of_10": u8}
-ex.set_yticks(range(len(keys))); ex.set_yticklabels([f"{'P' if c == 'progressor' else 'NP'}, {bn} band" for c, v, g, bn in keys][::-1]); ex.set_xlabel("biopsies (%)"); ex.set_xlim(0, 100); ex.set_ylim(-0.8, len(keys) - 0.4)
+ex.set_yticks(range(len(keys))); ex.set_yticklabels([f"{'P' if c == 'progressor' else 'NP'}, {bn} band" for c, v, g, bn in keys][::-1]); ex.set_xlabel("biopsies (%)"); ex.set_xlim(0, 100); ex.set_ylim(-0.8, len(keys) + 4.6)
 for r_ in (10, 9, 8, 7, 6, 5): ex.barh([-10], [0], color=greys[r_], label=f"{r_} of 10")
-ex.plot([], [], marker="D", color=MODEL["L-IMG"], ms=3, lw=0, label="voted call: all 10 repeats agree"); ex.plot([], [], marker="D", color="white", mec=MODEL["L-IMG"], mew=0.7, ms=3, lw=0, label="voted call: ≥ 8 of 10 agree")
-ex.legend(loc="lower center", bbox_to_anchor=(0.35, 1.0), ncol=3, fontsize=4.8, title="bars: repeats in modal band; diamonds: repeats agreeing with vote", title_fontsize=4.9, columnspacing=0.6, handletextpad=0.3)
-letter(fig, ex, "e", dx=-0.05, dy=-0.035)
+ex.plot([], [], marker="D", color=MODEL["L-IMG"], ms=3, lw=0, label="vote: all 10 agree"); ex.plot([], [], marker="D", color="white", mec=MODEL["L-IMG"], mew=0.7, ms=3, lw=0, label="vote: ≥ 8 of 10 agree")
+ex.legend(loc="upper left", bbox_to_anchor=(-0.02, 1.0), ncol=2, fontsize=4.8, title="bars: repeats in the modal band\ndiamonds: repeats agreeing with the vote", title_fontsize=4.9, columnspacing=0.8, handletextpad=0.3, alignment="left")
+letter(fig, ex, "e", dx=-0.09, dy=0.008)
 save(fig, "Fig3"); dump("Fig3", src)

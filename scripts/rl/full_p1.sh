@@ -3,6 +3,7 @@
 # Stage 2 (after SFT): GRPO-from-SFT (base = SFT merged). Stage 3: eval every checkpoint on val, best on test/test485. Resume-safe.
 set -eo pipefail
 STAGE=$1; export HF_HOME=/mnt/scratche/slow/fmlab/zuberi01/hf_cache HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false
+export MASTER_ADDR=127.0.0.1 MASTER_PORT=$((20000 + ${SLURM_JOB_ID:-$$} % 30000))   # unique per job: two GRPO runs on one node clashed on port 29500
 C=/mnt/scratche/slow/fmlab/zuberi01/phd/thesis/scripts/rl; R=/mnt/scratche/slow/fmlab/zuberi01/analysis/rl_grader; RUNS=$R/runs
 BASE=$(ls -d $HF_HOME/hub/models--google--medgemma-4b-it/snapshots/*/ | head -1)
 case $STAGE in

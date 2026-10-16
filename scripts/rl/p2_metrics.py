@@ -31,8 +31,14 @@ def curve(g, sc, ix=None):
     order = np.lexsort((RNG.rand(len(sc)), sc)); ss = sc[order]; reps = prep[order]
     opened = np.zeros(len(sc) + 1, int); seen = set()
     for j, r in enumerate(reps): seen.add(r); opened[j + 1] = len(seen)
-    n = np.round(BUD * len(sc)).astype(int); thr = np.array([-np.inf if k == 0 else ss[k - 1] for k in n]); fr = opened[n] / nrep
-    rev = sc[Li][None, :] <= thr[:, None]; ok = (g[Li] == hum)[None, :]; Z = (rev | ok).astype(float)
+    n = np.round(BUD * len(sc)).astype(int); fr = opened[n] / nrep
+    # tie-aware review probability: below the k-th score -> reviewed; tied at it -> reviewed with prob (#tied within budget)/(#tied)
+    q = np.zeros((len(n), len(Li)))
+    for b, k in enumerate(n):
+        if k == 0: continue
+        thr = ss[k - 1]; below = int((ss < thr).sum()); tied = int((ss == thr).sum()); frac = (k - below) / tied
+        s_l = sc[Li]; q[b] = np.where(s_l < thr, 1.0, np.where(s_l == thr, frac, 0.0))
+    ok = (g[Li] == hum).astype(float)[None, :]; Z = q + (1 - q) * ok
     return fr, Z
 def at(fr, Z, frac, ix):
     k = max(np.searchsorted(fr, frac, side="right") - 1, 0); ww = w[ix]; return float((Z[k, ix] * ww).sum() / ww.sum())

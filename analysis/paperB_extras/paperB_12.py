@@ -296,12 +296,14 @@ def triage_curve(name, task, d_lab, d_pop, weighted=True, oof=True):
     w = d_lab.w.values if weighted else np.ones(len(d_lab)); c = d_lab[col].values.astype(float); pats = d_lab.anon_id.values
     order = np.lexsort((RNG.rand(len(vp)), vp)); vps = vp[order]; rep_sorted = d_pop.CaseName.values[order]
     n_rev = np.round(BUDGETS * len(vp)).astype(int)
-    thr = np.array([(-np.inf if n == 0 else vps[n - 1]) for n in n_rev])                 # review everything with value <= thr (ties included)
+    thr = np.array([(-np.inf if n == 0 else vps[n - 1]) for n in n_rev])
+    # v2.1 (2026-10-16): tie-aware review probability (sections tied at the threshold reviewed in proportion to the budget left)
+    tq = np.array([0.0 if n == 0 else (n - (vps < vps[n - 1]).sum()) / (vps == vps[n - 1]).sum() for n in n_rev])
     opened = np.zeros(len(vp) + 1, int); seen = set()
     for j, r_ in enumerate(rep_sorted): seen.add(r_); opened[j + 1] = len(seen)
     frac_reports = opened[n_rev] / d_pop.CaseName.nunique()
-    REV = (vl[None, :] <= thr[:, None])                                                  # (budgets, labelled)
-    Z = np.maximum(REV, c[None, :])                                                      # reviewed -> correct
+    REV = np.where(vl[None, :] < thr[:, None], 1.0, np.where(vl[None, :] == thr[:, None], tq[:, None], 0.0))   # P(reviewed)
+    Z = REV + (1 - REV) * c[None, :]                                                     # reviewed -> correct
     def curve(ix): ww = w[ix]; return (Z[:, ix] * ww).sum(1) / ww.sum()
     pt = curve(np.arange(len(vl))); bs = np.stack([curve(ix) for ix in boot_groups(pats)])
     nrep = d_pop.CaseName.nunique()

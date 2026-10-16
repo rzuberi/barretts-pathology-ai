@@ -42,11 +42,11 @@ def forest(ax, key, src_key, xlab, xlim, dkey):
     ax.set_xlim(*xlim); ax.set_ylim(-0.7, top + 0.7); ax.set_yticks([]); ax.spines["left"].set_visible(False); ax.set_xlabel(xlab, fontsize=6.5)
 for i, (g, lab, kT, kH) in enumerate(ROWS):
     src["rows"].append({"group": g, "label": lab, "claim_T": T.get(kT) if kT else None, "claim_H": H.get(kH) if kH else None})
-axL = fig.add_axes([0.235, 0.075, 0.22, 0.875]); axR = fig.add_axes([0.635, 0.075, 0.22, 0.875])
+axL = fig.add_axes([0.235, 0.075, 0.22, 0.85]); axR = fig.add_axes([0.635, 0.075, 0.22, 0.85])
 forest(axL, "T", "T", "Δ sensitivity, triage − B* (single model)", (-0.12, 0.06), "d_sens"); forest(axR, "H", "H", "Δ AUROC, L-IMG − L-CNV", (-0.14, 0.16), "d_auroc")
 axL.text(0.06 + 0.012, top + 1.3, "Δ [95% CI]   sequenced", fontsize=5.6, va="bottom", ha="left", clip_on=False)
 axR.text(0.16 + 0.012, top + 1.3, "Δ [95% CI]", fontsize=5.6, va="bottom", ha="left", clip_on=False)
-lab_ax = fig.add_axes([0.0, 0.075, 0.23, 0.875]); lab_ax.set_xlim(0, 1); lab_ax.set_ylim(-0.7, top + 0.7); lab_ax.axis("off")
+lab_ax = fig.add_axes([0.0, 0.075, 0.23, 0.85]); lab_ax.set_xlim(0, 1); lab_ax.set_ylim(-0.7, top + 0.7); lab_ax.axis("off")
 for i, (g, lab, kT, kH) in enumerate(ROWS):
     lab_ax.text(0.99, Y(i), lab, fontsize=5.6, ha="right", va="center", fontweight="bold" if lab.startswith("Primary") else "normal")
     if i == 0 or ROWS[i - 1][0] != g: lab_ax.text(0.02, Y(i) + 0.62, g, fontsize=6.2, ha="left", va="bottom", fontweight="bold", color="#333333")
@@ -56,5 +56,5 @@ h = [Line2D([], [], marker="D", color="#222222", lw=0, ms=4.2, label="primary an
      Line2D([], [], marker="o", color=MODEL["L-CNV"], lw=0, ms=3.4, label="pre-specified sensitivity analysis, bound ≤ −0.05"), Line2D([], [], marker="|", color="#222222", lw=0, ms=4, mew=0.8, label="one-sided 95% lower bound"),
      Line2D([], [], color=MODEL["L-CNV"], lw=0.8, ls="--", label="−0.05 margin")]
 fig.legend(handles=h, loc="lower center", ncol=3, fontsize=5.8, bbox_to_anchor=(0.5, 0.0))
-letter(fig, lab_ax, "a", dx=0.005, dy=0.012); letter(fig, axR, "b", dx=-0.04, dy=0.012)
+letter(fig, lab_ax, "a", dx=0.005, dy=0.036); letter(fig, axR, "b", dx=-0.04, dy=0.036)
 save(fig, "Fig6"); dump("Fig6", src)

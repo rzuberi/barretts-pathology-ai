@@ -3,6 +3,7 @@
 # ckpt: eval one checkpoint on val. best: eval one checkpoint on val+test.
 set -eo pipefail
 export HF_HOME=/mnt/scratche/slow/fmlab/zuberi01/hf_cache HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false
+export MASTER_ADDR=127.0.0.1 MASTER_PORT=$((20000 + ${SLURM_JOB_ID:-$$} % 30000))   # unique per job: two GRPO runs on one node clashed on port 29500
 C=/mnt/scratche/slow/fmlab/zuberi01/phd/thesis/scripts/rl; O=/mnt/scratche/slow/fmlab/zuberi01/analysis/rl_sql; RUNS=$O/runs
 BASE=$(ls -d $HF_HOME/hub/models--Qwen--Qwen2.5-Coder-7B-Instruct/snapshots/*/ | head -1)
 case $1 in

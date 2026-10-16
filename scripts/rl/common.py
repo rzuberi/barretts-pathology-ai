@@ -23,15 +23,16 @@ Answer with ONLY a JSON object: {{"reasoning": "<optional, one short sentence>",
 REPORT:
 {report}"""
 UNSURE_LINE = "\nIf you cannot tell the grade reliably, answer \"UNSURE\" as the grade."
+CONF_LINE = "\nAlso add a \"confidence\" field: your probability, as an integer from 0 to 100, that this grade is correct."
 
 def report_text(r):
     t = ("GROSS DESCRIPTION:\n" + r["GrossDescription_redacted"] + "\n\nFINAL DIAGNOSIS:\n" + r["FinalDiagnosis_redacted"] +
          "\n\nMICROSCOPIC DESCRIPTION:\n" + r["MicroscopicDescription_redacted"])
     return t[:MAXCHARS]
 
-def make_messages(report, section, allow_unsure=False):
+def make_messages(report, section, allow_unsure=False, conf=False):
     return [{"role": "system", "content": SYSTEM},
-            {"role": "user", "content": TASK.format(section=section, report=report, unsure=UNSURE_LINE if allow_unsure else "")}]
+            {"role": "user", "content": TASK.format(section=section, report=report, unsure=(UNSURE_LINE if allow_unsure else "") + (CONF_LINE if conf else ""))}]
 
 _JSON = re.compile(r"\{.*\}", re.S)
 def parse_grade(text, allow_unsure=False):
@@ -52,3 +53,10 @@ def completion_text(c):
     """TRL passes completions as strings or as [{'role':'assistant','content':...}]"""
     if isinstance(c, list): return c[-1]["content"] if c else ""
     return c
+
+def parse_conf(text):
+    """stated confidence 0-100 -> float in [0,1], or None"""
+    if not isinstance(text, str): return None
+    m = re.search(r'"confidence"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)', text)
+    if not m: return None
+    v = float(m.group(1)); return max(0.0, min(1.0, v / 100.0)) if v <= 100 else None

@@ -4,7 +4,7 @@ import json, os, random, shutil, sys, tempfile, time
 sys.path.insert(0, os.path.dirname(__file__)); from sql_common import *
 BASE = os.environ["BASE"]; AD = os.environ.get("ADAPTER", ""); TAG = os.environ["TAG"]; SH = int(os.environ.get("SHOTS", 0)); N = int(os.environ.get("N", 0))
 SETS = os.environ.get("SETS", "val,test").split(","); PD = os.environ.get("PREDS", O + "/preds"); os.makedirs(PD, exist_ok=True)
-qs = [json.loads(l) for l in open(O + "/questions.jsonl")]
+qs = [json.loads(l) for l in open(os.environ.get("QFILE", O + "/questions.jsonl"))]
 tr = [q for q in qs if q["split"] == "train" and q["variant"] == 0]; rnd = random.Random(0)
 shots = rnd.sample([q for q in tr if q["answerable"]], 4) + rnd.sample([q for q in tr if not q["answerable"]], 1) if SH else None
 model_dir = BASE; tmp = None

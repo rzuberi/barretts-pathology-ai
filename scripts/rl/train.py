@@ -15,16 +15,19 @@ try:   # CUDA-graph capture corrupts Gemma 3 generations in vLLM 0.11 on this cl
 except Exception as _e: print("vllm patch skipped:", _e)
 MODE = os.environ["MODE"]; BASE = os.environ.get("BASE", "google/medgemma-4b-it"); OUT = os.environ["OUT"]; os.makedirs(OUT, exist_ok=True)
 STEPS = int(os.environ.get("STEPS", 300)); NTR = int(os.environ.get("N_TRAIN", 0)); ALPHA = os.environ.get("ALPHA"); ALPHA = float(ALPHA) if ALPHA else None
+SEED = int(os.environ.get("SEED", 0)); REWARD = os.environ.get("REWARD", "alpha" if ALPHA is not None else "p1"); KEEP_EXTRA = os.environ.get("KEEP_EXTRA") == "1"
 D = B + "/analysis/rl_grader/data"; DATA = os.environ.get("DATA", D + "/train.jsonl"); EXTRA = os.environ.get("EXTRA", ""); CAP = int(os.environ.get("CAP_PER_CLASS", 1200))
-rows = [json.loads(l) for l in open(DATA)] + ([json.loads(l) for l in open(EXTRA)] if EXTRA else [])
-rnd = random.Random(0)
+rows = [json.loads(l) for l in open(DATA)]; extra = [json.loads(l) for l in open(EXTRA)] if EXTRA else []
+if not KEEP_EXTRA: rows += extra; extra = []
+rnd = random.Random(SEED)   # seed 0 == project 1
 if MODE == "grpo":   # class-capped sample (rare grades carry the signal)
     by = {}
     for r in rows: by.setdefault(r["label"], []).append(r)
     rows = [x for g in by.values() for x in rnd.sample(g, min(CAP, len(g)))]
+rows += extra   # KEEP_EXTRA: low-agreement sections added uncapped
 rnd.shuffle(rows)
 if NTR: rows = rows[:NTR]
-print(f"{MODE}: {len(rows)} training items from {DATA}{' + ' + EXTRA if EXTRA else ''}; base {BASE}; alpha {ALPHA}", flush=True)
+print(f"{MODE}: {len(rows)} training items from {DATA}{' + ' + EXTRA if EXTRA else ''}; base {BASE}; alpha {ALPHA}; reward {REWARD}; seed {SEED}; uncapped extra {len(extra)}", flush=True)
 lora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, task_type="CAUSAL_LM",
                   target_modules=r".*language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)|^(?!.*vision).*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)")
 tok = AutoTokenizer.from_pretrained(BASE)
@@ -38,7 +41,7 @@ if os.path.isdir(OUT):
     last = os.path.join(OUT, ck[-1]) if ck else None
 if last: print("resuming from", last, flush=True)
 common_args = dict(output_dir=OUT, bf16=True, logging_steps=5, save_steps=50 if STEPS >= 100 else max(5, STEPS // 2), save_total_limit=None, report_to="none",
-                   gradient_checkpointing=True, max_steps=STEPS, seed=0)
+                   gradient_checkpointing=True, max_steps=STEPS, seed=SEED)
 if MODE == "sft":
     from trl import SFTTrainer, SFTConfig
     ds = Dataset.from_list([{"messages": make_messages(r["report"], r["section"]) + [{"role": "assistant", "content": json.dumps({"grade": r["label"]})}]} for r in rows])
@@ -47,15 +50,23 @@ if MODE == "sft":
     tr = SFTTrainer(model=model, args=cfg, train_dataset=ds, processing_class=tok, peft_config=lora)
 else:
     from trl import GRPOTrainer, GRPOConfig
-    ds = Dataset.from_list([{"prompt": make_messages(r["report"], r["section"], allow_unsure=ALPHA is not None), "label": r["label"]} for r in rows])
-    def reward(prompts, completions, label, **kw):
+    UNS = REWARD in ("alpha", "juryabs"); CONF = REWARD == "brier"
+    ds = Dataset.from_list([{"prompt": make_messages(r["report"], r["section"], allow_unsure=UNS, conf=CONF), "label": r["label"], "vf": float(r["vf"]) if r.get("vf") is not None else 1.0} for r in rows])
+    def reward(prompts, completions, label, vf, **kw):
         out = []
-        for c, y in zip(completions, label):
-            g = parse_grade(completion_text(c), allow_unsure=ALPHA is not None)
-            if ALPHA is None:
+        for c, y, v in zip(completions, label, vf):
+            txt = completion_text(c); g = parse_grade(txt, allow_unsure=UNS)
+            if REWARD == "p1":
                 out.append(-0.5 if g is None else 1.0 if g == y else 0.3 if ((g in POS) == (y in POS)) else 0.0)
-            else:
+            elif REWARD == "alpha":
                 out.append(-1.0 if g is None else ALPHA if g == "UNSURE" else 1.0 if g == y else -1.0)
+            elif REWARD == "juryabs":   # D1: abstention pays only where the jury itself disagreed
+                if g is None: out.append(-1.0)
+                elif g == "UNSURE": out.append(0.5 if v < 0.75 else 0.0)
+                else: out.append(1.0 if g == y else -1.0)
+            elif REWARD == "brier":     # D2: proper scoring rule on stated confidence
+                p = parse_conf(txt)
+                out.append(-1.0 if (g is None or p is None) else 1.0 - (p - (1.0 if g == y else 0.0)) ** 2)
         return out
     use_vllm = os.environ.get("USE_VLLM", "1") == "1"
     cfg = GRPOConfig(**common_args, learning_rate=2e-5, per_device_train_batch_size=16, gradient_accumulation_steps=8, num_generations=8,
@@ -65,5 +76,5 @@ else:
     tr = GRPOTrainer(model=model, args=cfg, train_dataset=ds, reward_funcs=[reward], processing_class=tok, peft_config=lora)
 tr.train(resume_from_checkpoint=last)
 tr.save_model(os.path.join(OUT, "final"))
-json.dump({"mode": MODE, "base": BASE, "n_train": len(rows), "steps": STEPS, "alpha": ALPHA, "log": tr.state.log_history}, open(os.path.join(OUT, "train_summary.json"), "w"), indent=1)
+json.dump({"mode": MODE, "base": BASE, "n_train": len(rows), "steps": STEPS, "alpha": ALPHA, "reward": REWARD, "seed": SEED, "log": tr.state.log_history}, open(os.path.join(OUT, "train_summary.json"), "w"), indent=1)
 print("TRAIN DONE", flush=True)

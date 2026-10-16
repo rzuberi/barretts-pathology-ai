@@ -4,7 +4,7 @@ Env: BASE, ADAPTER (dir or empty = zero-shot), TAG, SETS (comma list: val,test,t
 import json, os, shutil, sys, tempfile, time
 sys.path.insert(0, os.path.dirname(__file__)); from common import *
 BASE = os.environ.get("BASE", "google/medgemma-4b-it"); AD = os.environ.get("ADAPTER", ""); TAG = os.environ["TAG"]; N = int(os.environ.get("N", 0))
-SETS = os.environ.get("SETS", "val,test,test485").split(","); UNS = os.environ.get("UNSURE") == "1"; LP = os.environ.get("LOGPROBS") == "1"; K = int(os.environ.get("SAMPLES", 0))
+SETS = os.environ.get("SETS", "val,test,test485").split(","); UNS = os.environ.get("UNSURE") == "1"; LP = os.environ.get("LOGPROBS") == "1"; K = int(os.environ.get("SAMPLES", 0)); CONF = os.environ.get("CONF") == "1"
 D = B + "/analysis/rl_grader/data"; P = os.environ.get("PREDS", B + "/analysis/rl_grader/preds"); os.makedirs(P, exist_ok=True)
 if all(os.path.exists(f"{P}/{TAG}__{s}.jsonl") for s in SETS): print("done already"); sys.exit(0)
 model_dir = BASE; tmp = None
@@ -20,12 +20,13 @@ for s in SETS:
     if os.path.exists(out): continue
     rows = [json.loads(l) for l in open(f"{D}/{s}.jsonl")]
     if N: rows = rows[:N]
-    msgs = [make_messages(r["report"], r["section"], allow_unsure=UNS) for r in rows]
+    msgs = [make_messages(r["report"], r["section"], allow_unsure=UNS, conf=CONF) for r in rows]
     t0 = time.time(); res = llm.chat(msgs, greedy, use_tqdm=False, lora_request=LORA); dt = time.time() - t0
     samp = llm.chat(msgs, SamplingParams(temperature=1.0, max_tokens=384, n=K, seed=0), use_tqdm=False, lora_request=LORA) if K else None
     with open(out + ".part", "w") as f:
         for i, (r, o) in enumerate(zip(rows, res)):
             txt = o.outputs[0].text; g = parse_grade(txt, allow_unsure=UNS); d = {k: r[k] for k in r if k != "report"}; d.update({"raw": txt[:600], "pred": g})
+            if CONF: d["conf"] = parse_conf(txt)
             if LP and o.outputs[0].logprobs:
                 # probability of the first token of the grade value: find the token right after '"grade": "'
                 toks = o.outputs[0].logprobs; text_so_far = ""; pgr = None

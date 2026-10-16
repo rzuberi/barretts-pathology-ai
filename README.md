@@ -58,6 +58,7 @@ Three pre-registered projects ([`scripts/rl/DESIGN_p1.md`](scripts/rl/DESIGN_p1.
 (1) one 4B model (MedGemma-4B [Sellergren 2025]) trained with GRPO [Shao 2024] against the jury's high-confidence labels, compared with zero-shot and supervised fine-tuning (SFT), following the Text2SQL RL recipe of Stoisser et al. [2025];
 (2) the same model rewarded for answering UNSURE, compared with ten-model disagreement at a matched review budget;
 (3) a 7B model (Qwen2.5-Coder-7B) that answers cohort questions by writing SQL over a pseudonymised label table, with query templates held out for testing.
+Pre-registered follow-ups ([`scripts/rl/DESIGN_followups.md`](scripts/rl/DESIGN_followups.md)) measure calibration directly (error-detection AUROC, expected calibration error), repeat project 1 with two more seeds, try two alternative uncertainty rewards (an UNSURE reward conditioned on jury disagreement; a Brier-scored stated confidence), turn project 3 into a multi-turn tool-using agent (`list_tables`, `describe`, `run_sql`; at most 6 calls) trained with GRPO, and apply the same SFT→GRPO recipe to public gene-perturbation data (PerturbQA [Wu 2025], as used by SynthPert [2025]).
 
 ### 3.8 Compute (`scripts/cluster/`, `feasibility/run_task.sh`)
 Every job is small and idempotent. Each one is submitted twice, to two GPU partitions, takes a lock when it starts and cancels its pending twin. Pull workers hold an allocation and drain the task list. Report text and slides are never read inside GPU jobs: tiles are cut once on CPU nodes and stored.
@@ -77,7 +78,12 @@ Every job is small and idempotent. Each one is submitted twice, to two GPU parti
 | How many tiles per slide? | Random tiles: 0.858 with 1 tile, 0.932 with 16, 0.948 with 256, 0.950 with 1,200, 0.952 with all. Sixteen attention-ranked tiles: 0.945. The "most normal" tiles carry almost no signal (0.686 with 1 tile). Grid or diversity sampling is worse than random at small budgets. Training on 256 random tiles costs nothing measurable. |
 | Can one small model replace the jury? (RL project 1) | Nearly. MedGemma-4B after SFT then GRPO agrees with the human on 89.1% [83.4, 93.6] of sections, against 42.9% zero-shot, 82.3% after SFT alone (RL adds +6.9 [+2.7, +11.8] over SFT) and 87.3% for MedGemma-27B zero-shot. It stays 3.9 points [0.0, 7.5] behind the ten-model jury while running in about 0.05 s per report. |
 | Can one model know when it is unsure? (RL project 2) | Not through abstention: rewarded for answering UNSURE, the model almost never did (under 0.1% of sections). Ranked by its own grade-token probability, it reaches 95.5% after review of 17% of reports, against 96.9% for jury triage (−1.3 [−5.0, +2.3]). |
+| Is the RL gain robust? (3 seeds) | Yes. RL − SFT is +6.9, +6.3 and +6.8 points in three seeds (mean +6.6 [+3.5, +10.4]); RL reaches 89.1–90.6%. Against MedGemma-27B the 4B model is +1.8 to +3.3 points ahead in every seed, but never significantly. |
+| Does the model know its own errors? | The jury's vote fraction flags its errors with AUROC 0.86 and is close to calibrated (ECE 0.03). The RL model's grade-token probability ranks errors as well (AUROC 0.91; Δ +0.05 [−0.05, +0.15]) but is over-confident (ECE 0.10). Eight-sample agreement is useless (0.58). |
+| Can a different reward teach abstention? | No. With UNSURE rewarded on jury-disputed sections the model abstained on none of the test sections; with a Brier-scored stated confidence it said 100 on every section. At 20% of reports, ranking by the model's own token probability matches jury triage (97.3% vs 97.1%). |
 | Does RL help text-to-SQL cohort questions? (RL project 3) | No. On held-out query templates GRPO answers 47.5% correctly against 52.5% for SFT (−5.0 [−22.6, +12.4]) and refuses 57% of unanswerable questions against 98% for SFT. |
+| Does a tool-using agent help? | RL turns a poor agent into a usable one (held-out accuracy 20% → 59%, correct refusals 9% → 58%), but it does not beat single-shot SFT (+12.1 [−20.7, +52.7] by question; +1.7 [−10.0, +15.1] averaged over templates). |
+| Does the recipe transfer to gene-perturbation prediction? | No gain from RL. On PerturbQA, SFT lifts direction-of-change AUROC from 0.50 to 0.62; GRPO adds −0.002 [−0.011, +0.007]. Detecting a change stays at 0.57, level with the published SFT baseline (0.59–0.60) and below SynthPert (0.70–0.79). |
 | Does the archive transfer to the research cohort? | Weakly. ERIN-trained models reach 0.571 on SWG and SWG-trained models 0.684 on ERIN. SWG positives are LGD only. |
 
 Full tables, confidence intervals and deviations from each design are in the result files on the cluster; the code that produces each number is in the folder named in the Methods.
@@ -125,6 +131,8 @@ Paths inside the scripts point to the authors' cluster. The code is published fo
 - Sellergren A et al. MedGemma technical report. arXiv 2025. arXiv:2507.05201
 - Shao Z et al. DeepSeekMath: pushing the limits of mathematical reasoning in open language models (introduces GRPO). arXiv 2024. arXiv:2402.03300
 - Stoisser J, Boubnovski Martell M, Fauqueur J. Sparks of tabular reasoning via Text2SQL reinforcement learning. arXiv 2025. arXiv:2505.00016
+- SynthPert. arXiv 2025. arXiv:2509.25346
+- Wu M, et al. PerturbQA benchmark. ICLR 2025. github.com/genentech/PerturbQA
 - Tripathi A et al. Employing consensus-based reasoning with locally deployed LLMs for enabling structured data extraction from surgical pathology reports. *medRxiv* 2025. doi:10.1101/2025.04.22.25326217
 - Truhn D et al. Extracting structured information from unstructured histopathology reports using generative pre-trained transformer 4. *Journal of Pathology* 2024. doi:10.1002/path.6232
 - Vennalaganti P et al. Discordance among pathologists in the United States and Europe in diagnosis of low-grade dysplasia for patients with Barrett's esophagus. *Gastroenterology* 2017. doi:10.1053/j.gastro.2016.10.041

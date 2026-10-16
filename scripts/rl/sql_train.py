@@ -8,7 +8,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import LoraConfig
 MODE = os.environ["MODE"]; BASE = os.environ["BASE"]; OUT = os.environ["OUT"]; STEPS = int(os.environ.get("STEPS", 300)); NTR = int(os.environ.get("N_TRAIN", 0))
 os.makedirs(OUT, exist_ok=True)
-qs = [json.loads(l) for l in open(O + "/questions.jsonl")]; tr = [q for q in qs if q["split"] == "train"]; random.Random(0).shuffle(tr)
+qs = [json.loads(l) for l in open(os.environ.get("QFILE", O + "/questions.jsonl"))]; tr = [q for q in qs if q["split"] == "train"]; random.Random(0).shuffle(tr)
 if NTR: tr = tr[:NTR]
 print(MODE, len(tr), "training questions", flush=True)
 lora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, task_type="CAUSAL_LM", target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"])

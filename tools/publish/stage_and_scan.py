@@ -1,7 +1,7 @@
 """Cluster side of the public-repo sync. Copies an ALLOWLIST of code files from the live project folders into a staging tree,
 masks accession-number examples in comments, then scans every staged file. Exits 1 (nothing gets published) if any check fails.
 
-Checks: (1) size < 1 MB; (2) extension allowlist (.py .sh .js .R .md .toml .cfg); (3) secrets (tokens, keys, the grading-app
+Checks: (1) size < 1 MB; (2) extension allowlist (.py .sh .js .R .toml .cfg, plus DESIGN*.md design docs); (3) secrets (tokens, keys, the grading-app
 passphrase pattern); (4) real ERIN report numbers and patient pseudonyms (compared against the report table on the cluster);
 (5) verbatim report text: any 8-word run shared with fewer than 10 real reports (stock phrasing found in many reports is allowed); (6) e-mail addresses other than the noreply address.
 Data never leaves the cluster: only file *contents that pass* are copied out, by tools/publish/publish.sh."""
@@ -24,7 +24,7 @@ for src, dst, rec in SOURCES:
         dirs[:] = [d for d in dirs if d not in SKIP_DIR and not d.startswith(".")] if rec else []
         for f in files:
             p = os.path.join(root, f); ext = os.path.splitext(f)[1]
-            if ext not in EXT or ".bak" in f or f.endswith("~"): continue
+            if (ext not in EXT and not (ext == ".md" and f.startswith("DESIGN"))) or ".bak" in f or f.endswith("~"): continue  # design docs only among .md
             if os.path.getsize(p) > MAXB: continue
             rel = os.path.join(dst, os.path.relpath(p, src)); out = os.path.join(STAGE, rel); os.makedirs(os.path.dirname(out), exist_ok=True)
             txt = open(p, errors="replace").read()

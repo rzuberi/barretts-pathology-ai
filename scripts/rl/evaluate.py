@@ -8,35 +8,24 @@ SETS = os.environ.get("SETS", "val,test,test485").split(","); UNS = os.environ.g
 D = B + "/analysis/rl_grader/data"; P = os.environ.get("PREDS", B + "/analysis/rl_grader/preds"); os.makedirs(P, exist_ok=True)
 if all(os.path.exists(f"{P}/{TAG}__{s}.jsonl") for s in SETS): print("done already"); sys.exit(0)
 model_dir = BASE; tmp = None
-if AD:
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer, AutoProcessor
-    from peft import PeftModel
-    tmp = tempfile.mkdtemp(dir=B + "/analysis/rl_grader/tmp_merged") if os.path.isdir(B + "/analysis/rl_grader/tmp_merged") else tempfile.mkdtemp(dir=os.environ.get("TMPDIR", "/tmp"))
-    m = AutoModelForCausalLM.from_pretrained(BASE, torch_dtype=torch.bfloat16); m = PeftModel.from_pretrained(m, AD).merge_and_unload(); m.save_pretrained(tmp, safe_serialization=True)
-    AutoTokenizer.from_pretrained(BASE).save_pretrained(tmp)
-    try: AutoProcessor.from_pretrained(BASE).save_pretrained(tmp)
-    except Exception: pass
-    for f in ("preprocessor_config.json", "processor_config.json", "chat_template.json", "chat_template.jinja"):
-        src = os.path.join(BASE if os.path.isdir(BASE) else "", f)
-        if os.path.isdir(BASE) and os.path.exists(src) and not os.path.exists(os.path.join(tmp, f)): shutil.copy(src, tmp)
-    del m; torch.cuda.empty_cache(); model_dir = tmp
 from vllm import LLM, SamplingParams
+from vllm.lora.request import LoRARequest
+LORA = LoRARequest('adapter', 1, AD) if AD else None
 cfgtxt = open(os.path.join(model_dir, "config.json")).read().lower() if os.path.isdir(model_dir) else model_dir.lower()
 kw = {"limit_mm_per_prompt": {"image": 0}} if "gemma3" in cfgtxt and "vision" in cfgtxt else {}
-llm = LLM(model=model_dir, max_model_len=3584, gpu_memory_utilization=float(os.environ.get("VLLM_MEM", 0.85)), dtype="bfloat16", seed=0, **kw)
-greedy = SamplingParams(temperature=0.0, max_tokens=128, logprobs=5 if LP else None)
+llm = LLM(model=model_dir, max_model_len=3584, gpu_memory_utilization=float(os.environ.get("VLLM_MEM", 0.85)), dtype="bfloat16", seed=0, enable_lora=bool(AD), max_lora_rank=16, enforce_eager=True, **kw)   # CUDA graphs corrupt Gemma 3 on this driver (diag 2026-10-16)
+greedy = SamplingParams(temperature=0.0, max_tokens=384, logprobs=5 if LP else None)
 for s in SETS:
     out = f"{P}/{TAG}__{s}.jsonl"
     if os.path.exists(out): continue
     rows = [json.loads(l) for l in open(f"{D}/{s}.jsonl")]
     if N: rows = rows[:N]
     msgs = [make_messages(r["report"], r["section"], allow_unsure=UNS) for r in rows]
-    t0 = time.time(); res = llm.chat(msgs, greedy, use_tqdm=False); dt = time.time() - t0
-    samp = llm.chat(msgs, SamplingParams(temperature=1.0, max_tokens=128, n=K, seed=0), use_tqdm=False) if K else None
+    t0 = time.time(); res = llm.chat(msgs, greedy, use_tqdm=False, lora_request=LORA); dt = time.time() - t0
+    samp = llm.chat(msgs, SamplingParams(temperature=1.0, max_tokens=384, n=K, seed=0), use_tqdm=False, lora_request=LORA) if K else None
     with open(out + ".part", "w") as f:
         for i, (r, o) in enumerate(zip(rows, res)):
-            txt = o.outputs[0].text; g = parse_grade(txt, allow_unsure=UNS); d = {k: r[k] for k in r if k != "report"}; d.update({"raw": txt[:300], "pred": g})
+            txt = o.outputs[0].text; g = parse_grade(txt, allow_unsure=UNS); d = {k: r[k] for k in r if k != "report"}; d.update({"raw": txt[:600], "pred": g})
             if LP and o.outputs[0].logprobs:
                 # probability of the first token of the grade value: find the token right after '"grade": "'
                 toks = o.outputs[0].logprobs; text_so_far = ""; pgr = None

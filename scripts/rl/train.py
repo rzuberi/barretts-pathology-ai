@@ -7,6 +7,12 @@ sys.path.insert(0, os.path.dirname(__file__)); from common import *
 from datasets import Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import LoraConfig
+try:   # CUDA-graph capture corrupts Gemma 3 generations in vLLM 0.11 on this cluster's driver: force eager mode for TRL's colocated vLLM too
+    import vllm
+    _orig_init = vllm.LLM.__init__
+    def _eager_init(self, *a, **k): k["enforce_eager"] = True; _orig_init(self, *a, **k)
+    vllm.LLM.__init__ = _eager_init
+except Exception as _e: print("vllm patch skipped:", _e)
 MODE = os.environ["MODE"]; BASE = os.environ.get("BASE", "google/medgemma-4b-it"); OUT = os.environ["OUT"]; os.makedirs(OUT, exist_ok=True)
 STEPS = int(os.environ.get("STEPS", 300)); NTR = int(os.environ.get("N_TRAIN", 0)); ALPHA = os.environ.get("ALPHA"); ALPHA = float(ALPHA) if ALPHA else None
 D = B + "/analysis/rl_grader/data"; DATA = os.environ.get("DATA", D + "/train.jsonl"); EXTRA = os.environ.get("EXTRA", ""); CAP = int(os.environ.get("CAP_PER_CLASS", 1200))
@@ -53,8 +59,8 @@ else:
         return out
     use_vllm = os.environ.get("USE_VLLM", "1") == "1"
     cfg = GRPOConfig(**common_args, learning_rate=2e-5, per_device_train_batch_size=16, gradient_accumulation_steps=8, num_generations=8,
-                     max_prompt_length=3072, max_completion_length=128, beta=0.04, temperature=1.0, lr_scheduler_type="constant_with_warmup", warmup_ratio=0.02,
-                     use_vllm=use_vllm, vllm_mode="colocate", vllm_gpu_memory_utilization=float(os.environ.get("VLLM_MEM", 0.35)), vllm_max_model_length=3328,
+                     max_prompt_length=3072, max_completion_length=256, beta=0.04, temperature=1.0, lr_scheduler_type="constant_with_warmup", warmup_ratio=0.02,
+                     use_vllm=use_vllm, vllm_mode="colocate", vllm_gpu_memory_utilization=float(os.environ.get("VLLM_MEM", 0.35)),
                      log_completions=False)
     tr = GRPOTrainer(model=model, args=cfg, train_dataset=ds, reward_funcs=[reward], processing_class=tok, peft_config=lora)
 tr.train(resume_from_checkpoint=last)

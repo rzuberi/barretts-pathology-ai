@@ -17,7 +17,9 @@ t0 = time.time()
 if not (os.path.exists(wsi) and os.path.getsize(wsi) == int(row["size"])):
     for attempt in range(4):
         try:
-            with urllib.request.urlopen(row.url, timeout=1800) as r, open(wsi + ".part", "wb") as fh:
+            have = os.path.getsize(wsi + ".part") if os.path.exists(wsi + ".part") else 0   # resume a partial download (HTTP Range)
+            req = urllib.request.Request(row.url, headers={"Range": f"bytes={have}-"} if have else {})
+            with urllib.request.urlopen(req, timeout=600) as r, open(wsi + ".part", "ab" if have and r.status == 206 else "wb") as fh:
                 while True:
                     b = r.read(1 << 23)
                     if not b: break

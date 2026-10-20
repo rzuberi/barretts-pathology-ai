@@ -24,9 +24,9 @@ if SMOKE: tr = te = s
 print(f"{DS}/{MODEL}/f{F}/{ARM}: train {len(tr)} ({int(tr.label.sum())} pos), test {len(te)} ({int(te.label.sum())} pos); {len(ix['missing'])} slides missing features", flush=True)
 t0 = time.time(); path = f"{PACKS}/{MODEL}_{DS}.npy"
 with open(path, "rb") as f:   # sequential read of the whole pack into host RAM (no mmap)
-    v = np.lib.format.read_magic(f); shape, _, dt = np.lib.format._read_array_header(f, v); X = np.empty(shape, dt); buf = X.reshape(-1); o = 0
+    v = np.lib.format.read_magic(f); shape, _, dt = np.lib.format._read_array_header(f, v); X = np.empty(shape, dt); buf = X.reshape(-1).view(np.uint8); o = 0   # byte view: readinto returns BYTES (fp16 element offsets were wrong before 2026-10-20)
     while o < buf.size: n = f.readinto(memoryview(buf[o:o + (1 << 28)])); assert n > 0; o += n
-D = X.shape[1]; print(f"pack {X.shape} ({X.nbytes / 1e9:.1f} GB) in RAM in {time.time() - t0:.0f}s", flush=True)
+assert o == X.nbytes, (o, X.nbytes); D = X.shape[1]; print(f"pack {X.shape} ({X.nbytes / 1e9:.1f} GB) in RAM in {time.time() - t0:.0f}s", flush=True)
 def span(sl): return ix["slides"][sl]
 def bag(sl, sel=None):
     st, en = span(sl); x = X[st:en] if sel is None else X[st + sel]; return torch.from_numpy(np.ascontiguousarray(x)).to(dev).float()

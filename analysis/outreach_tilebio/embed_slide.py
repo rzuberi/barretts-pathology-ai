@@ -22,7 +22,7 @@ def read_tiles(path):
     """sequential chunked read of the uint8 npy (mmap over Lustre is slow; see tile-budget smoke lessons)"""
     with open(path, "rb") as f:
         ver = np.lib.format.read_magic(f); shape, fo, dt = np.lib.format._read_array_header(f, ver)
-        X = np.empty(shape, dt); buf = X.reshape(-1); step = 1 << 28; o = 0
+        X = np.empty(shape, dt); buf = X.reshape(-1).view(np.uint8); step = 1 << 28; o = 0   # bytes (uint8 tiles: identical)
         while o < buf.size: n = f.readinto(memoryview(buf[o:o + step])); assert n > 0; o += n
     return X
 MEAN = torch.tensor([0.485, 0.456, 0.406], device=dev).view(1, 3, 1, 1); STD = torch.tensor([0.229, 0.224, 0.225], device=dev).view(1, 3, 1, 1)

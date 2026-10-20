@@ -110,7 +110,7 @@ for f in glob.glob(f"{A}/data/feats/cost/*/*.json"):
     c = json.load(open(f))
     for mo in MODELS:
         if mo in c and "gpu_s_all" in c[mo]: cr.append({"ds": c["ds"], "slide": c["slide"], "n": c["n_tiles"], "model": mo, "gpu": c[mo]["gpu"], **{k: c[mo][k] for k in ("gpu_s_16", "gpu_s_256", "gpu_s_all")}})
-cd = pd.DataFrame(cr); cd.to_csv(RES + "/cost_per_slide.csv", index=False)
+cd = pd.DataFrame(cr); use = set(pd.read_csv(A + "/manifests/slides.csv").query("use").slide); cd = cd[cd.slide.isin(use)]; cd.to_csv(RES + "/cost_per_slide.csv", index=False)
 for (mo, gpu), q in cd.groupby(["model", "gpu"]):
     for ds in DSS + ["both"]:
         qq = q if ds == "both" else q[q.ds == ds]
@@ -121,7 +121,9 @@ for (mo, gpu), q in cd.groupby(["model", "gpu"]):
             "saving_x_256_median": round(float((qq.gpu_s_all / qq.gpu_s_256).median()), 1)}
 tl = []
 for f in glob.glob(f"{A}/data/tiles/*/*.json"):
-    m = json.load(open(f)); tl.append({"ds": m["ds"], "n": m["n_tiles"], "t_read_s": m["t_read_s"], "t_mask_s": m["t_mask_s"], "workers": m["read_workers"]})
+    m = json.load(open(f))
+    if m["slide"] not in use: continue
+    tl.append({"ds": m["ds"], "n": m["n_tiles"], "t_read_s": m["t_read_s"], "t_mask_s": m["t_mask_s"], "workers": m["read_workers"]})
 tl = pd.DataFrame(tl)
 for ds, q in tl.groupby("ds"): R["cost"][f"cpu_tiling|{ds}"] = {"n_slides": len(q), "median_tiles": float(q.n.median()), "mean_tiles": round(float(q.n.mean()), 1), "max_tiles": int(q.n.max()),
                                                               "total_tiles": int(q.n.sum()), "median_read_s": float(q.t_read_s.median()), "median_mask_s": float(q.t_mask_s.median()), "read_workers": int(q.workers.median())}

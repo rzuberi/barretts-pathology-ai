@@ -11,7 +11,7 @@ SOURCES = [  # (source dir, destination in repo, recursive)
     (T + "/labeller", "labeller", False), (T + "/campaigns/allslides", "campaigns/allslides", False), (T + "/scripts", "scripts", True),
     (T + "/feasibility", "feasibility", False),
 ] + [(f"{B}/analysis/{s}/code", f"analysis/{s}", False) for s in
-     ("isbi_rerun", "juror_benchmark", "erin_handlabel", "erin_swg_linkage", "paperB_extras", "tilebudget")]
+     ("isbi_rerun", "juror_benchmark", "erin_handlabel", "erin_swg_linkage", "paperB_extras", "tilebudget", "outreach_panakeia", "outreach_tilebio")]
 EXT = {".py", ".sh", ".js", ".R", ".toml", ".cfg"}
 SKIP_DIR = {"__pycache__", ".git", "runs", "output", "logs"}
 MAXB = 1_000_000

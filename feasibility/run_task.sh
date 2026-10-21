@@ -28,7 +28,10 @@ if [[ -f "${DONE_FILE}" ]]; then echo "[skip] done: ${DONE_FILE}"; exit 0; fi
 
 if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
   OTHER="$(cat "${LOCK_DIR}/job_id" 2>/dev/null || true)"
-  if [[ -n "${OTHER}" ]] && [[ -n "$(squeue -h -j "${OTHER}" 2>/dev/null)" ]]; then
+  # a preempted+requeued job keeps its SLURM_JOB_ID, so a lock holding our own id is ours: reclaim it (resume from checkpoint)
+  if [[ "${OTHER}" == "${SELF_JOB_ID}" ]]; then
+    echo "[reclaim] lock held by this job id (requeue, restart ${SLURM_RESTART_COUNT:-?})"
+  elif [[ -n "${OTHER}" ]] && [[ -n "$(squeue -h -j "${OTHER}" 2>/dev/null)" ]]; then
     echo "[skip] owned by live job ${OTHER}"; exit 0
   fi
   rm -rf "${LOCK_DIR}" || true
@@ -60,4 +63,3 @@ cat > "${DONE_FILE}" <<EOF
 {"task":"${TASK_NAME}","job_id":"${SELF_JOB_ID}","partition":"${SELF_PARTITION}","completed_at":"$(date -Iseconds)","output_dir":"${OUTDIR}"}
 EOF
 echo "[done] ${DONE_FILE}"
-]50;SetProfile=Basic]0;Terminal

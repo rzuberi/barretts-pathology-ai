@@ -1,7 +1,10 @@
 """Paper A encoder training: explore/clf/train_clf.py (BioClinical-ModernBERT-base, same recipe) generalised to
   FOLD   (-1 = all train patients; k = drop train rows of fold-k patients, see make_folds.py)
   TEACHER jury (train.jsonl vf>=0.75 labels) | juror1 | top3 | soft (labels from O/labels/*.json over train + all_lowconf rows)
-  SAVE=1 (write best weights to O/runs/TAG/model.pt). Env also: SEED, TAG, EPOCHS (3), LR (3e-5), BS (16), N (smoke cap), EVAL_EVERY (0.5).
+  SAVE=1 (write best weights to O/runs/TAG/model.pt). Env also: SEED, TAG, EPOCHS (3), LR (3e-5), BS (16), N (smoke cap), EVAL_EVERY (0.5),
+  FRAC   (keep this fraction of training PATIENTS, drawn with Random(1000+SEED); learning curve)
+  YEAR_MAX (keep training rows AND val-selection rows whose report year PSyy <= this; temporal split)
+  MODEL  (HF id override, e.g. thomas-sounack/BioClinical-ModernBERT-large; same tokenizer as base, checked at start-up).
 Checkpoint chosen on val.jsonl exact agreement with the jury, every half epoch. Predicts val, test, test485, pop -> O/preds/TAG__set.jsonl."""
 import json, math, os, random, sys, time
 import numpy as np, torch, torch.nn.functional as F
@@ -9,6 +12,7 @@ os.environ["HF_HOME"] = "/mnt/scratche/slow/fmlab/zuberi01/hf_cache"; os.environ
 from pa_common import *
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 SEED = int(os.environ.get("SEED", 0)); TAG = os.environ["TAG"]; FOLD = int(os.environ.get("FOLD", -1)); TEACHER = os.environ.get("TEACHER", "jury"); SAVE = os.environ.get("SAVE") == "1"
+MODEL = os.environ.get("MODEL", MODEL); FRAC = float(os.environ.get("FRAC", 1)); YMAX = int(os.environ.get("YEAR_MAX", 0))
 EP = float(os.environ.get("EPOCHS", 3)); LR = float(os.environ.get("LR", 3e-5)); BS = int(os.environ.get("BS", 16)); N = int(os.environ.get("N", 0)); EVAL_EVERY = float(os.environ.get("EVAL_EVERY", 0.5))
 P = mkdir(O + "/preds"); R = mkdir(f"{O}/runs/{TAG}")
 if all(os.path.exists(f"{P}/{TAG}__{s}.jsonl") for s in ["test", "test485", "pop"]) and not (SAVE and not os.path.exists(R + "/model.pt")): print("done already"); sys.exit(0)
@@ -25,10 +29,20 @@ if TEACHER != "jury":
 if FOLD >= 0:
     fold = json.load(open(O + "/folds.json"))["fold"]; keep = [i for i, x in enumerate(Tk["train"]["ids"]) if fold[meta["train"][x]["anon_id"]] != FOLD]
     Tk["train"] = {k: [v[i] for i in keep] for k, v in Tk["train"].items()}
+year = lambda x: int(x[2:4])   # ids are PSyy-nnnnn#S
+sub = lambda d, keep: {k: [v[i] for i in keep] for k, v in d.items()}
+V = Tk["val"]   # checkpoint-selection rows (val.jsonl); restricted to <= YEAR_MAX under the temporal split so no later-year text picks the checkpoint
+if YMAX:
+    Tk["train"] = sub(Tk["train"], [i for i, x in enumerate(Tk["train"]["ids"]) if year(x) <= YMAX]); V = sub(V, [i for i, x in enumerate(V["ids"]) if year(x) <= YMAX])
+if FRAC < 1:
+    pats = sorted({meta["train"][x]["anon_id"] for x in Tk["train"]["ids"]}); sel = set(random.Random(1000 + SEED).sample(pats, round(FRAC * len(pats))))
+    Tk["train"] = sub(Tk["train"], [i for i, x in enumerate(Tk["train"]["ids"]) if meta["train"][x]["anon_id"] in sel])
 if N:
     for s in SETS: Tk[s] = {k: v[:N] for k, v in Tk[s].items()}
-ntrain = len(Tk["train"]["ids"]); print(f"{TAG}: teacher {TEACHER} fold {FOLD} seed {SEED}: {ntrain} training rows", flush=True)
-pad = AutoTokenizer.from_pretrained(MODEL).pad_token_id; SOFT = TEACHER == "soft"
+    V = {k: v[:N] for k, v in V.items()}
+ntrain = len(Tk["train"]["ids"]); print(f"{TAG}: teacher {TEACHER} fold {FOLD} seed {SEED} frac {FRAC} year_max {YMAX}: {ntrain} training rows, {len(V['ids'])} selection rows", flush=True)
+tk = AutoTokenizer.from_pretrained(MODEL); pad = tk.pad_token_id; SOFT = TEACHER == "soft"
+assert tk.get_vocab() == AutoTokenizer.from_pretrained("thomas-sounack/BioClinical-ModernBERT-base").get_vocab(), "cached token ids are for the base tokenizer"
 def batches(d, bs, shuffle, rng=None):
     idx = list(range(len(d["input_ids"])))
     if shuffle: rng.shuffle(idx)
@@ -52,10 +66,11 @@ def predict(d, bs=64):
 opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=0.01); rng = random.Random(SEED)
 nb = math.ceil(ntrain / BS); total = int(nb * EP); warm = int(0.06 * total); sch = get_linear_schedule_with_warmup(opt, warm, total)
 eval_at = max(1, int(nb * EVAL_EVERY)); step = 0; best = (-1, None); t0 = time.time()
-log = {"tag": TAG, "model": MODEL, "params": nparam, "lr": LR, "bs": BS, "epochs": EP, "seed": SEED, "fold": FOLD, "teacher": TEACHER, "n_train": ntrain, "evals": []}
+log = {"tag": TAG, "model": MODEL, "params": nparam, "lr": LR, "bs": BS, "epochs": EP, "seed": SEED, "fold": FOLD, "teacher": TEACHER, "frac": FRAC, "year_max": YMAX, "n_train": ntrain,
+       "n_train_patients": len({meta["train"][x]["anon_id"] for x in Tk["train"]["ids"]}), "n_select": len(V["ids"]), "evals": []}
 def do_eval():
     global best
-    pr, _ = predict(Tk["val"]); acc = float((pr.argmax(1) == np.array(Tk["val"]["label"])).mean())
+    pr, _ = predict(V); acc = float((pr.argmax(1) == np.array(V["label"])).mean())
     log["evals"].append({"step": step, "epoch": round(step / nb, 2), "val_exact": round(acc, 4), "minutes": round((time.time() - t0) / 60, 1)}); print(log["evals"][-1], flush=True)
     if acc > best[0]: best = (acc, {k: v.detach().to("cpu", copy=True) for k, v in model.state_dict().items()})
     model.train()

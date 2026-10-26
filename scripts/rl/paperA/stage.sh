@@ -15,6 +15,13 @@ case $ST in
               BASE=$BASE ADAPTER=$O/sft/runs/sftm_s$1/final TAG=sftm_s$1 SETS=val,test,test485 PREDS=$O/sft/preds python $RL/evaluate.py
               BASE=$BASE ADAPTER=$O/sft/runs/sftm_s$1/final TAG=sftm_s$1_maj8 SETS=test485 SAMPLES=8 PREDS=$O/sft/preds python $RL/evaluate.py ;;
   swg)        python swg_encoder.py ;;
+  chain_lc)   for f in 0.05 0.1 0.25 0.5; do TAG=lc${f}_s$1 SEED=$1 FRAC=$f python train_enc.py; done
+              for f in 0.05 0.1; do TAG=lc${f}e12_s$1 SEED=$1 FRAC=$f EPOCHS=12 python train_enc.py; done
+              TAG=y21_s$1 SEED=$1 YEAR_MAX=21 python train_enc.py ;;
+  large)      TAG=large_s$1 SEED=$1 MODEL=thomas-sounack/BioClinical-ModernBERT-large python train_enc.py ;;
+  smoke2)     TAG=smk_large SEED=0 MODEL=thomas-sounack/BioClinical-ModernBERT-large N=96 EPOCHS=1 BS=16 python train_enc.py 2>&1 | grep -E "training rows|val_exact|test485|Error|error" | tail -4
+              TAG=smk_lc SEED=0 FRAC=0.05 YEAR_MAX=21 N=96 EPOCHS=1 BS=8 python train_enc.py 2>&1 | grep -E "training rows|val_exact|test485|Error|error" | tail -4
+              echo PA_SMOKE2_OK ;;
   smoke)      SM=$O/smoke; rm -rf $SM/runs; mkdir -p $SM
               SEED=0 OUT=$SM/runs/sftm STEPS=5 N_TRAIN=40 python train_sft_masked.py 2>&1 | grep -E "first example|TRAIN DONE|Error|error" | tail -3
               BASE=$BASE ADAPTER=$SM/runs/sftm/final TAG=smk_sftm SETS=test485 N=24 SAMPLES=8 PREDS=$SM/preds python $RL/evaluate.py 2>&1 | grep -E "parse rate|Error" | tail -2

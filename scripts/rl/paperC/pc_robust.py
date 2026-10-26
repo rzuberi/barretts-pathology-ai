@@ -33,8 +33,12 @@ def centre_shrunk(s, grp, lam):
     return np.round(s - (gm + (m - gm) * n / (n + lam)), 9)
 
 
-def twoway(s, perts, genes, lam=0.0, n_iter=20):
-    r = global_rank(s)
+def twoway(s, perts, genes, lam=0.0, n_iter=20, scale="rank"):
+    """scale: 'rank' = the primary metric (alternating centring of the global percentile rank); 'score' = centre the score
+    itself; 'logitrank' = centre the logit of the percentile rank. A shortcut that is additive in knockdown and gene on the
+    *score* scale is removed exactly only if the centring is done on that same scale, so the scale is part of the metric."""
+    r = {"rank": lambda: global_rank(s), "score": lambda: np.asarray(s, float),
+         "logitrank": lambda: np.log(global_rank(s) / (1 - global_rank(s)))}[scale]()
     for _ in range(n_iter):
         r = centre_shrunk(r, perts, lam); r = centre_shrunk(r, genes, lam)
     return r
@@ -53,6 +57,18 @@ def twoway_cf(s, perts, genes, seed=0, n_iter=20):
                 new[app] = out[app] - pd.Series(np.asarray(grp)[app]).map(m).fillna(out[fit].mean()).values
             out = np.round(new, 9)
     return out
+
+
+def var_shares(s, perts, genes, n_iter=20):
+    """Share of the score's (percentile-rank) variance taken by the additive knockdown part, the additive gene part and the
+    gene-by-knockdown remainder. The additive parts are the alternating-projection fit, so they are the exact components the
+    corrected metric removes. Shares are normalised to sum to 1 (the two additive parts are near-orthogonal but not exactly)."""
+    r = global_rank(s); resid = r.copy(); pc = np.zeros_like(r); gc = np.zeros_like(r)
+    for _ in range(n_iter):
+        m = pd.Series(resid).groupby(np.asarray(perts)).transform("mean").values; pc += m; resid = resid - m
+        m = pd.Series(resid).groupby(np.asarray(genes)).transform("mean").values; gc += m; resid = resid - m
+    v = np.array([pc.var(), gc.var(), resid.var()]); v = v / v.sum()
+    return {"knockdown": float(v[0]), "gene": float(v[1]), "interaction": float(v[2])}
 
 
 def gene_train_rate(c, kind):
@@ -79,6 +95,9 @@ def run_cell(c):
             v[f"DIR_2w_shrink{lam}"] = Gdir.auc(Gdir.build(twoway(sd, pdm, gdm, lam)), np.ones(len(sd)))
         v["DE_2w_cf2"] = Gde.auc(Gde.build(twoway_cf(sde, perts, genes)), np.ones(len(sde)))
         v["DIR_2w_cf2"] = Gdir.auc(Gdir.build(twoway_cf(sd, pdm, gdm)), np.ones(len(sd)))
+        for sc in ("score", "logitrank"):
+            v[f"DE_2w_{sc}"] = Gde.auc(Gde.build(twoway(sde, perts, genes, scale=sc)), np.ones(len(sde)))
+            v[f"DIR_2w_{sc}"] = Gdir.auc(Gdir.build(twoway(sd, pdm, gdm, scale=sc)), np.ones(len(sd)))
         # gene effect from the training label rate, knockdown effect from the score
         for m, (G, s, pp, gg, kind, y) in {"DE": (Gde, sde, perts, genes, "de", df.de.values), "DIR": (Gdir, sd, pdm, gdm, "dir", ydir)}.items():
             gr = pd.Series(gg).map(gt[kind]).fillna(gt[kind].mean()).values
@@ -88,13 +107,19 @@ def run_cell(c):
             v[f"{m}_2w_genetrain"] = G.auc(G.build(r), np.ones(len(s)))
         out[tag] = {k: float(x) for k, x in v.items()}
         print(c, tag, {k: round(x, 3) for k, x in out[tag].items()}, flush=True)
+    # variance decomposition of each method's score: additive knockdown part, additive gene part, interaction (residual)
+    vd = {}
+    for tag in KEY:
+        sde, sdir = scores_from_preds(PATHS[tag], df, c)
+        vd[tag] = {m: var_shares(s, pp, gg) for m, (s, pp, gg) in
+                   {"DE": (sde, perts, genes), "DIR": (sdir[dmask], perts[dmask], genes[dmask])}.items()}
     # "LLM copies retrieval": per-pair and per-knockdown agreement of sft_r with its k = 10 retrieval
     rde, rdir = scores_from_preds(PATHS["sft_r"], df, c); kde, kdir = scores_from_preds(PATHS["knn_mean_k10"], df, c)
     from scipy.stats import spearmanr
     cp = {"pair_de_spearman": float(spearmanr(rde, kde).statistic), "pair_dir_spearman": float(spearmanr(rdir[dmask], kdir[dmask]).statistic),
           "pert_de": [list(map(float, pd.Series(x).groupby(perts).mean().values)) for x in (rde, kde)],
           "pert_dir": [list(map(float, pd.Series(x).groupby(pdm).mean().values)) for x in (rdir[dmask], kdir[dmask])]}
-    return c, out, cp
+    return c, out, cp, vd
 
 
 def simulate(seed=0, n_pert=300, n_gene=400, listsize=(40, 120)):
@@ -110,21 +135,28 @@ def simulate(seed=0, n_pert=300, n_gene=400, listsize=(40, 120)):
         logit = a[p] + b[gs] + inter
         y = rng.random(len(gs)) < 1 / (1 + np.exp(-logit))
         for g, i, yy in zip(gs, inter, y): rows.append((p, g, i, yy, a[p] + b[g]))
-    d = pd.DataFrame(rows, columns=["pert", "gene", "inter", "y", "add"]); d["y"] = d.y.astype(int)
+    d = pd.DataFrame(rows, columns=["pert", "gene", "inter", "y", "addit"]); d["y"] = d.y.astype(int)
     G = GeneAUC(d.gene.values, d.y.values); w = np.ones(len(d))
     noise = rng.normal(0, 1, len(d))
     out = {}
-    for name, s in {"shortcut_only (additive)": d.add.values, "oracle_logit (additive + interaction)": d.add.values + d.inter.values,
-                    "interaction_only": d.inter.values, "noise": noise}.items():
-        out[name] = {"raw": float(G.auc(G.build(s), w)), "corrected": float(G.auc(G.build(twoway_residual(s, d.pert.values, d.gene.values)), w))}
+    for name, s in {"shortcut_only (additive)": d.addit.values, "oracle_logit (additive + interaction)": d.addit.values + d.inter.values,
+                    "interaction_only": d.inter.values, "knockdown_effect_only": d.groupby("pert").addit.transform("mean").values,
+                    "noise": noise}.items():
+        out[name] = {"raw": float(G.auc(G.build(s), w)),
+                     **{f"corrected_{sc}": float(G.auc(G.build(twoway(s, d.pert.values, d.gene.values, scale=sc)), w))
+                        for sc in ("rank", "score", "logitrank")}}
     return out
 
 
 if __name__ == "__main__":
     with Pool(4) as pool: res = pool.map(run_cell, CELLS)
-    rob = {c: r for c, r, _ in res}
+    rob = {c: r for c, r, _, _ in res}
     mean = {t: {m: float(np.mean([rob[c][t][m] for c in CELLS])) for m in rob[CELLS[0]][t]} for t in KEY}
     sim = {f"seed{s}": simulate(s) for s in (0, 1, 2)}
     json.dump({"per_cell": rob, "mean": mean, "simulation": sim}, open(O + "/robust.json", "w"), indent=1)
-    json.dump({c: cp for c, _, cp in res}, open(O + "/copy_scatter.json", "w"), indent=1)
+    json.dump({c: cp for c, _, cp, _ in res}, open(O + "/copy_scatter.json", "w"), indent=1)
+    v = {c: x for c, _, _, x in res}
+    vdm = {t_: {m: {k: float(np.mean([v[c][t_][m][k] for c in CELLS])) for k in ("knockdown", "gene", "interaction")}
+                for m in ("DE", "DIR")} for t_ in KEY}
+    json.dump(vdm, open(O + "/vardecomp.json", "w"), indent=1)
     print(json.dumps(mean, indent=1)); print(json.dumps(sim["seed0"], indent=1)); print("ROBUST DONE")

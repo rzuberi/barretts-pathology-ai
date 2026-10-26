@@ -11,10 +11,10 @@ clf = J(CLF + "/metrics.json")["test485"]; sft = J(O + "/sft/results.json").get(
 pc = J(O + "/perclass.json").get("models", {}); tri = {k: J(O + f"/triage_oof_{k}.json") for k in ("none", "train_patients")}
 def spr(p):
     f = p + "__test485.timing.json"; return J(f)["seconds"] / J(f)["reports"] if os.path.exists(f) else None
-def pts(ax, x, ys, cis, color, label, ms=7):   # seeds as small hollow markers, mean as a filled one with the seed-0 CI
+def pts(ax, x, ys, cis, color, label, ms=7, off=(7, -3)):   # seeds as small hollow markers, mean as a filled one with the seed-0 CI
     for y, c in zip(ys, cis): ax.plot([x], [100 * y], "o", mfc="none", mec=color, ms=4, alpha=0.7)
     m = 100 * np.mean(ys); ax.errorbar([x], [m], yerr=[[m - 100 * cis[0][0]], [100 * cis[0][1] - m]], fmt="o", color=color, ms=ms, capsize=2, lw=1)
-    ax.annotate(f"{label}\n{m:.1f}", (x, m), textcoords="offset points", xytext=(7, -3), fontsize=8, color="#333")
+    ax.annotate(f"{label}\n{m:.1f}", (x, m), textcoords="offset points", xytext=off, fontsize=8, color="#333")
 
 # 1. cost-accuracy frontier
 fig, ax = plt.subplots(figsize=(6, 4))
@@ -22,9 +22,9 @@ pts(ax, 106, [clf["jury"]["exact_w"]], [clf["jury"]["exact_w_ci"]], C["jury"], "
 pts(ax, 8.5, [clf["medgemma27b_zs"]["exact_w"]], [clf["medgemma27b_zs"]["exact_w_ci"]], C["27b"], "MedGemma-27B zero-shot")
 pts(ax, 0.05, [clf[f"rl_s{s}"]["exact_w"] for s in range(3)], [clf[f"rl_s{s}"]["exact_w_ci"] for s in range(3)], C["rl"], "4B SFT→GRPO")
 if sft: pts(ax, spr(O + "/sft/preds/sftm_s0") or 0.086, [sft[str(s)]["sft_masked"]["exact_w"] for s in range(3)], [sft[str(s)]["sft_masked"]["exact_w_ci"] for s in range(3)], C["sft"], "4B masked SFT")
-pts(ax, spr(CLF + "/preds/mbb32_s0") or 0.003, [clf[f"mbb32_s{s}"]["exact_w"] for s in range(3)], [clf[f"mbb32_s{s}"]["exact_w_ci"] for s in range(3)], C["enc"], "150M encoder")
+pts(ax, spr(CLF + "/preds/mbb32_s0") or 0.003, [clf[f"mbb32_s{s}"]["exact_w"] for s in range(3)], [clf[f"mbb32_s{s}"]["exact_w_ci"] for s in range(3)], C["enc"], "150M encoder", off=(-4, -22))
 L = [cur[f"large_s{s}"] for s in range(3) if f"large_s{s}" in cur]
-if L: pts(ax, L[0].get("sec_per_report", 0.008), [x["exact_w"] for x in L], [x["exact_w_ci"] for x in L], C["large"], "400M encoder")
+if L: pts(ax, L[0].get("sec_per_report", 0.008), [x["exact_w"] for x in L], [x["exact_w_ci"] for x in L], C["large"], "400M encoder", off=(7, 8))
 pts(ax, 0.006, [clf["tfidf_lr"]["exact_w"]], [clf["tfidf_lr"]["exact_w_ci"]], C["tfidf"], "TF-IDF + LR")
 ax.set_xscale("log"); ax.set_xlim(1.5e-3, 1.5e3); ax.set_xlabel("seconds per report (one GPU, batched; log scale)"); ax.set_ylabel("weighted exact vs pathologist, % (n = 479)")
 ax.set_title("Cost-accuracy frontier on the held-out human-graded sections", fontsize=10); fig.tight_layout(); fig.savefig(F + "/fig1_frontier.png", dpi=200); plt.close(fig)

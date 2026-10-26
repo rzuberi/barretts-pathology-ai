@@ -5,16 +5,16 @@ encoder AND record agree; batch 2 = the jury-vs-record disagreements not already
 Items carry ONLY the report text and what to grade (a numbered specimen / lettered section when the SWG block suffix maps
 to one, else the worst grade anywhere in the report). Record, encoder and jury grades and the stratum go to the key file
 only (chmod 600, never shown to the grader). Pairs sharing (report, target) collapse into one item; the key keeps every pair.
-Read-only on sources. Usage: python swg_adjudication_build.py   (writes hand_grading/items_swg.json + items_swg_batch2.json)
-Loading batch 2 later: python swg_adjudication_build.py load2   (appends batch 2 to items_swg.json; labels are keyed by item_id, nothing is lost)"""
+Read-only on sources. Usage: python swg_adjudication_build.py   (writes hand_grading/items_rehan_swg.json + items_rehan_swg_batch2.json)
+Loading batch 2 later: python swg_adjudication_build.py load2   (appends batch 2 to items_rehan_swg.json; labels are keyed by item_id, nothing is lost)"""
 import html, json, os, re, sys
 import numpy as np, pandas as pd
 
 B = "/mnt/scratche/slow/fmlab/zuberi01"; H = B + "/hand_grading"; OUT = B + "/analysis/erin_swg_adjudication"
 if len(sys.argv) > 1 and sys.argv[1] == "load2":
-    a = json.load(open(H + "/items_swg.json")); b = json.load(open(H + "/items_swg_batch2.json")); ids = {i["item_id"] for i in a}
-    a += [i for i in b if i["item_id"] not in ids]; json.dump(a, open(H + "/items_swg.json", "w")); os.chmod(H + "/items_swg.json", 0o600)
-    print(f"items_swg.json now {len(a)} items"); sys.exit()
+    a = json.load(open(H + "/items_rehan_swg.json")); b = json.load(open(H + "/items_rehan_swg_batch2.json")); ids = {i["item_id"] for i in a}
+    a += [i for i in b if i["item_id"] not in ids]; json.dump(a, open(H + "/items_rehan_swg.json", "w")); os.chmod(H + "/items_rehan_swg.json", 0o600)
+    print(f"items_rehan_swg.json now {len(a)} items"); sys.exit()
 os.makedirs(OUT, exist_ok=True); os.chmod(OUT, 0o700)
 g = pd.read_csv(B + "/analysis/paperA/swg/grades.csv", dtype=str).fillna("")
 cm = pd.read_csv(B + "/analysis/erin_swg_linkage/common_subset_with_all_grades.csv", dtype=str).fillna("")
@@ -92,8 +92,8 @@ b2 = pd.concat([jd, a2]).iloc[rng.permutation(len(jd) + 20)]
 items2, key2, _ = build(b2, n, 2)
 for it in items1 + items2:
     if it.pop("_found") is False: it["html"] = it["html"].replace("ONLY (highlighted)", "ONLY (marker not found in the text — read the whole report and grade that specimen)")
-json.dump(items1, open(H + "/items_swg.json", "w")); os.chmod(H + "/items_swg.json", 0o600)
-json.dump(items2, open(H + "/items_swg_batch2.json", "w")); os.chmod(H + "/items_swg_batch2.json", 0o600)
+json.dump(items1, open(H + "/items_rehan_swg.json", "w")); os.chmod(H + "/items_rehan_swg.json", 0o600)
+json.dump(items2, open(H + "/items_rehan_swg_batch2.json", "w")); os.chmod(H + "/items_rehan_swg_batch2.json", 0o600)
 kf = OUT + "/key_DO_NOT_OPEN_UNTIL_DONE.csv"; pd.DataFrame(key1 + key2).to_csv(kf, index=False); os.chmod(kf, 0o600)
 k = pd.DataFrame(key1 + key2)
 for b in (1, 2):

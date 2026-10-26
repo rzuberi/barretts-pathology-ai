@@ -38,7 +38,7 @@ for t in TAGS:
 json.dump(R, open(O + "/curve_metrics.json", "w"), indent=1); os.chmod(O + "/curve_metrics.json", 0o600)
 for t, r in R["tags"].items():
     L = r.get("train_log", {}); d = r.get(f"minus_{REF}_479", {}); dt = r.get(f"minus_{REF}_test>=2022", {})
-    print(f"{t:14s} n_train {L.get('n_train'):>6} pts {L.get('n_train_patients'):>5} | 479: {100*r['exact_w']:.1f} {[round(100*x,1) for x in r['exact_w_ci']]} unw {100*r['exact_unw']:.1f} "
+    print(f"{t:14s} n_train {str(L.get('n_train')):>6} pts {str(L.get('n_train_patients')):>5} | 479: {100*r['exact_w']:.1f} {[round(100*x,1) for x in r['exact_w_ci']]} unw {100*r['exact_unw']:.1f} "
           f"by-year {[round(100*v['exact_w'],1) for v in r['by_year_479'].values()]} | test {100*r['test_agree']:.1f} <=21 {100*r['test_agree_<=2021']:.1f} >=22 {100*r['test_agree_>=2022']:.1f}"
           + (f" | vs {REF}: 479 {100*d['point']:+.1f} {[round(100*x,1) for x in d['ci']]}, test>=22 {100*dt['point']:+.1f} {[round(100*x,1) for x in dt['ci']]}" if d else "")
           + f" | {L.get('train_minutes')} min, {r.get('sec_per_report')} s/report")

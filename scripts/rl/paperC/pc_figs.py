@@ -24,10 +24,11 @@ LABEL = {"knn_mean_k20": "kNN mean-sim k20 (retrieval)", "knn_mean_k10": "kNN me
          "sft_r": "SFT, retrieval prompt", "sft_kr": "SFT, descriptions + retrieval", "grpo_kr": "GRPO on descriptions + retrieval",
          "listsize_only": "list size only", "shiftknn_k20": "predicted shift (label-free)", "shiftknn_k10": "predicted shift k10",
          "shiftknn_k50": "predicted shift k50", "shift_ridge": "predicted shift, ridge", "shift_kridge": "predicted shift, kernel ridge",
-         "knn_k20_shiftpart": "kNN per-knockdown mean (shift part)", "oracle_loo": "oracle, leave-one-out", "oracle_self": "oracle, self-inclusive (leaky)",
+         "knn_k20_shiftpart": "kNN per-knockdown mean (shift part)", "oracle_loo": "oracle, leave-one-out (raw only)", "oracle_self": "oracle, self-inclusive (leaky)",
          "pc2_think_plain": "Qwen3-8B thinking, zero-shot", "pc2_think_r": "Qwen3-8B thinking + retrieval"}
 MAIN = ["knn_mean_k20", "knn_mean_k10", "knn_kg_k20", "corevote_meansim", "corevote_full", "corevote_contrast", "corevote_anchor",
         "pc2_think_r", "pc2_think_plain", "sft_r", "sft_kr", "grpo_kr", "F_sft", "F_grpo", "F_zero_shot", "listsize_only", "shiftknn_k20"]
+RAW_ONLY = {"oracle_loo", "oracle_self"}   # the oracles use test labels; no corrected value is meaningful (anti-correlated by construction)
 SHORT = ["listsize_only", "shiftknn_k10", "shiftknn_k20", "shiftknn_k50", "shift_ridge", "shift_kridge", "knn_k20_shiftpart", "oracle_loo"]
 
 
@@ -37,14 +38,16 @@ def pt(tag, m):
 
 def dumbbell(ax, tags, raw_m, cor_m, title):
     tags = [t for t in tags if pt(t, raw_m) and pt(t, cor_m)]
-    tags = sorted(tags, key=lambda t: pt(t, cor_m)[0])
+    tags = sorted(tags, key=lambda t: (pt(t, raw_m)[0] if t in RAW_ONLY else pt(t, cor_m)[0]))
     y = np.arange(len(tags))
     for i, t in enumerate(tags):
         r, c = pt(t, raw_m), pt(t, cor_m)
-        ax.plot([r[0], c[0]], [i, i], color="#cfd4d9", lw=1.4, zorder=1)
+        if t not in RAW_ONLY:
+            ax.plot([r[0], c[0]], [i, i], color="#cfd4d9", lw=1.4, zorder=1)
         ax.plot(r[0], i, "o", ms=4.5, color=RAWC, zorder=2)
-        ax.plot(c[0], i, "o", ms=4.5, color=CORC, zorder=3)
-        ax.hlines(i, c[1], c[2], color=CORC, lw=1.0, alpha=0.55, zorder=2)
+        if t not in RAW_ONLY:
+            ax.plot(c[0], i, "o", ms=4.5, color=CORC, zorder=3)
+            ax.hlines(i, c[1], c[2], color=CORC, lw=1.0, alpha=0.55, zorder=2)
     ax.axvline(0.5, color="#b00020", lw=0.8, ls="--", zorder=0)
     ax.set_yticks(y); ax.set_yticklabels([LABEL.get(t, t) for t in tags])
     ax.set_xlabel("AUROC (per-gene)"); ax.set_title(title, loc="left", fontsize=9)

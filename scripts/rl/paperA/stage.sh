@@ -18,6 +18,8 @@ case $ST in
   chain_lc)   for f in 0.05 0.1 0.25 0.5; do TAG=lc${f}_s$1 SEED=$1 FRAC=$f python train_enc.py; done
               for f in 0.05 0.1; do TAG=lc${f}e12_s$1 SEED=$1 FRAC=$f EPOCHS=12 python train_enc.py; done
               TAG=y21_s$1 SEED=$1 YEAR_MAX=21 python train_enc.py ;;
+  chain_lc2)  TAG=lc0.05e60_s$1 SEED=$1 FRAC=0.05 EPOCHS=60 python train_enc.py; TAG=lc0.1e30_s$1 SEED=$1 FRAC=0.1 EPOCHS=30 python train_enc.py
+              TAG=lc0.25e12_s$1 SEED=$1 FRAC=0.25 EPOCHS=12 python train_enc.py ;;   # constant ~2,700 optimiser steps (= 3 epochs of the full set)
   large)      TAG=large_s$1 SEED=$1 MODEL=thomas-sounack/BioClinical-ModernBERT-large python train_enc.py ;;
   smoke2)     TAG=smk_large SEED=0 MODEL=thomas-sounack/BioClinical-ModernBERT-large N=96 EPOCHS=1 BS=16 python train_enc.py 2>&1 | grep -E "training rows|val_exact|test485|Error|error" | tail -4
               TAG=smk_lc SEED=0 FRAC=0.05 YEAR_MAX=21 N=96 EPOCHS=1 BS=8 python train_enc.py 2>&1 | grep -E "training rows|val_exact|test485|Error|error" | tail -4

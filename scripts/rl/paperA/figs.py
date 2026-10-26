@@ -69,18 +69,23 @@ fig.tight_layout(); fig.savefig(F + "/fig4_teacher.png", dpi=200); plt.close(fig
 # 5. learning curve (training rows, by patient) and 6. temporal split
 lc = {t: r for t, r in cur.items() if t.startswith("lc")}
 if lc:
-    fig, axs = plt.subplots(1, 2, figsize=(9, 3.6))
+    import re
+    fig, axs = plt.subplots(1, 2, figsize=(9, 3.6)); arms = {"e3": ("3 epochs (recipe)", C["enc"]), "e12": ("12 epochs", C["large"]), "const": ("constant ~2,700 steps", C["27b"])}
     for ax, key, yl in ((axs[0], "exact_w", "weighted exact vs pathologist, % (479)"), (axs[1], "test_agree", "agreement with the jury, % (test fold)")):
-        for ep, col, lab_ in ((False, C["enc"], "3 epochs"), (True, C["large"], "12 epochs")):
-            d = {}
-            for t, r in lc.items():
-                if ("e12" in t) == ep: d.setdefault(r["train_log"]["n_train"], []).append(100 * r[key])
-            for s in range(3):
-                t = f"mbb32_s{s}" if key == "exact_w" else f"mbb32_s{s}"
-                if not ep and t in cur: d.setdefault(cur[t]["train_log"]["n_train"] if "train_log" in cur[t] else 14380, []).append(100 * cur[t][key])
-            xs = sorted(d); ax.plot(xs, [np.mean(d[x]) for x in xs], "-o", color=col, lw=2, ms=6, label=lab_)
-            for x in xs: ax.plot([x] * len(d[x]), d[x], "o", mfc="none", mec=col, ms=4, alpha=0.6)
-        ax.set_xscale("log"); ax.set_xlabel("jury-labelled training sections (log scale)"); ax.set_ylabel(yl)
+        G = {}   # arm -> frac -> [(n_train, value)]
+        for t, r in lc.items():
+            m = re.match(r"lc([0-9.]+)(?:e(\d+))?_s", t); frac, ep = float(m.group(1)), m.group(2)
+            arm = "e3" if ep is None else ("e12" if ep == "12" and frac != 0.25 else "const")
+            G.setdefault(arm, {}).setdefault(frac, []).append((r["train_log"]["n_train"], 100 * r[key]))
+        for s_ in range(3):
+            t = f"mbb32_s{s_}"
+            if t in cur: G.setdefault("e3", {}).setdefault(1.0, []).append((14380, 100 * cur[t][key]))
+        for arm, (lab_, col) in arms.items():
+            if arm not in G: continue
+            fr = sorted(G[arm]); xs = [np.mean([n for n, _ in G[arm][f]]) for f in fr]; ys = [np.mean([v for _, v in G[arm][f]]) for f in fr]
+            ax.plot(xs, ys, "-o", color=col, lw=2, ms=6, label=lab_)
+            for x, f in zip(xs, fr): ax.plot([x] * len(G[arm][f]), [v for _, v in G[arm][f]], "o", mfc="none", mec=col, ms=4, alpha=0.6)
+        ax.set_xscale("log"); ax.set_xlabel("jury-labelled training sections (5-100% of patients, log)"); ax.set_ylabel(yl)
     axs[0].axhline(100 * clf["jury"]["exact_w"], color=C["jury"], ls="--", lw=1, label="jury"); axs[0].legend(frameon=False, fontsize=8, loc="lower right")
     fig.tight_layout(); fig.savefig(F + "/fig5_learning_curve.png", dpi=200); plt.close(fig)
 tm = {t: r for t, r in cur.items() if t.startswith("y21") or t.startswith("lc0.5_") or t.startswith("mbb32")}
@@ -91,6 +96,6 @@ if any(t.startswith("y21") for t in tm):
         rs = [r for t, r in tm.items() if t.startswith(p)]
         for k, (key, _) in enumerate(keys):
             ys = [100 * r[key] for r in rs]; ax.bar(k + (j - 1) * 0.27, np.mean(ys), 0.25, color=[C["oof"], C["grey"], C["enc"]][j], label=lab_ if k == 0 else None); ax.plot([k + (j - 1) * 0.27] * len(ys), ys, "o", mfc="none", mec="#333", ms=3)
-    ax.set_xticks(range(3)); ax.set_xticklabels([k[1] for k in keys], fontsize=8); ax.set_ylim(85, 100); ax.set_ylabel("exact agreement, % (3 seeds)"); ax.legend(frameon=False, fontsize=8, loc="lower right"); ax.set_title("Temporal split", fontsize=10)
+    ax.set_xticks(range(3)); ax.set_xticklabels([k[1] for k in keys], fontsize=8); ax.set_ylim(85, 100); ax.set_ylabel("exact agreement, % (3 seeds)"); ax.legend(frameon=False, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3); ax.set_title("Temporal split", fontsize=10)
     fig.tight_layout(); fig.savefig(F + "/fig6_temporal.png", dpi=200); plt.close(fig)
 print("figures:", sorted(os.listdir(F)))

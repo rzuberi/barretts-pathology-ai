@@ -218,14 +218,14 @@ async function pump(){if(pumping)return;pumping=true;
   catch(e){syncBadge();await new Promise(r=>setTimeout(r,backoff));backoff=Math.min(backoff*2,15000)}}
  pumping=false;syncBadge()}
 function syncBadge(){const n=loadQ().length;const el=document.getElementById("sync");if(el){el.textContent=n?`saving ${n}…`:"saved";el.style.color=n?"#b45309":"var(--ok)"}}
-function allDone(){S.view="done";app.innerHTML=`<div class="card end"><h2>All ${S.items.length} sections labelled.</h2><p class="stat">Thank you — export: labels_${esc(S.name)}.csv on the cluster.</p></div>`}
+function allDone(){S.view="done";app.innerHTML=`<div class="card end"><h2>All ${S.items.length} sections labelled.</h2><p class="stat">Thank you — export: labels_${esc(S.name)}.csv on the cluster.</p><p><button onclick="localStorage.removeItem('g_name');location.href='/?switch'">Switch grader</button></p></div>`}
 document.addEventListener("keydown",e=>{
  if(S.view!=="item")return;
  const inNote=document.activeElement&&document.activeElement.id==="note";
  if(inNote){if(e.key==="Escape"){e.preventDefault();key("Escape")}else if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();S.inNote=true;const r=reduce(S.sel,"Enter+mod",true);if(r.action==="confirm"){document.activeElement.blur();S.inNote=false;if(S.sel.grades.length||S.sel.ambiguous)confirm_();else toast("pick a grade first")}}return}
  if(e.metaKey||e.ctrlKey||e.altKey)return;
  if(/^[1-6]$|^[aipsnz]$|^Enter$/.test(e.key)){e.preventDefault();key(e.key)}});
-if(S.name&&S.pw){login();start()}else login();
+if(S.name&&S.pw&&!/[?&]switch/.test(location.search)){login();start()}else login();
 </script>"""
 
 LEGACY_PAGE = """<!doctype html><meta charset="utf-8"><title>ERIN Lab Grading (legacy)</title>

@@ -11,7 +11,7 @@ O5 = {"NDBE": 0, "NORMAL_OTHER": 0, "IND": 1, "LGD": 2, "HGD": 3, "CANCER": 4}; 
 key = pd.read_csv(OUT + "/key_DO_NOT_OPEN_UNTIL_DONE.csv", dtype=str).fillna("")
 if len(sys.argv) > 1: key = key[key.batch == sys.argv[1]]
 db = sqlite3.connect(f"file:{B}/hand_grading/grading.db?mode=ro", uri=True, timeout=5)
-lab = pd.read_sql("SELECT item_id, grades, ambiguous, note FROM section_labels WHERE grader='swg'", db)
+lab = pd.read_sql("SELECT item_id, grades, ambiguous, note FROM section_labels WHERE grader='rehan_swg'", db)
 lab["rehan"] = lab.grades.map(lambda s: R5[max(O5[g] for g in json.loads(s))] if json.loads(s) else "")
 d = key.merge(lab[["item_id", "rehan", "ambiguous", "note"]], on="item_id", how="inner"); d = d[d.rehan != ""]
 d["jury"] = np.where(d.mappable == "True", d.jury_majority_8, d.whole_report_jury)   # jury at the level Rehan graded

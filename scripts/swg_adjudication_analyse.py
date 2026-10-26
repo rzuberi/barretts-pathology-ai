@@ -9,9 +9,14 @@ import numpy as np, pandas as pd
 B = "/mnt/scratche/slow/fmlab/zuberi01"; OUT = B + "/analysis/erin_swg_adjudication"
 O5 = {"NDBE": 0, "NORMAL_OTHER": 0, "IND": 1, "LGD": 2, "HGD": 3, "CANCER": 4}; R5 = {0: "NDBE", 1: "IND", 2: "LGD", 3: "HGD", 4: "CANCER"}
 key = pd.read_csv(OUT + "/key_DO_NOT_OPEN_UNTIL_DONE.csv", dtype=str).fillna("")
-if len(sys.argv) > 1: key = key[key.batch == sys.argv[1]]
-db = sqlite3.connect(f"file:{B}/hand_grading/grading.db?mode=ro", uri=True, timeout=5)
-lab = pd.read_sql("SELECT item_id, grades, ambiguous, note FROM section_labels WHERE grader='rehan_swg'", db)
+if len(sys.argv) > 1 and sys.argv[1] != "all": key = key[key.batch == sys.argv[1]]
+SRC = sys.argv[2] if len(sys.argv) > 2 else None  # optional labels CSV (app export) instead of the live db
+if SRC:
+    c = pd.read_csv(SRC, dtype=str).fillna("")
+    lab = pd.DataFrame({"item_id": c.section_id, "grades": c.grades.map(lambda g: json.dumps([x for x in g.split("|") if x])), "ambiguous": c.ambiguous.astype(int), "note": c.note})
+else:
+    db = sqlite3.connect(f"file:{B}/hand_grading/grading.db?mode=ro", uri=True, timeout=5)
+    lab = pd.read_sql("SELECT item_id, grades, ambiguous, note FROM section_labels WHERE grader='rehan_swg'", db)
 lab["rehan"] = lab.grades.map(lambda s: R5[max(O5[g] for g in json.loads(s))] if json.loads(s) else "")
 d = key.merge(lab[["item_id", "rehan", "ambiguous", "note"]], on="item_id", how="inner"); d = d[d.rehan != ""]
 d["jury"] = np.where(d.mappable == "True", d.jury_majority_8, d.whole_report_jury)   # jury at the level Rehan graded

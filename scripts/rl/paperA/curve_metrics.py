@@ -35,6 +35,26 @@ for t in TAGS:
     tm = f"{pre(t)}__test485.timing.json"
     if os.path.exists(tm): x = json.load(open(tm)); r["sec_per_report"] = round(x["seconds"] / x["reports"], 4)
     R["tags"][t] = r
+# seed-mean per arm (tag minus _s<seed>): mean exact, seed-mean paired delta vs REF and vs the seed-matched explore encoder mbb32_s<seed>
+import re
+arms = {}
+for t in TAGS:
+    m = re.match(r"(.*)_s(\d)$", t)
+    if m and t in OK: arms.setdefault(m.group(1), []).append((int(m.group(2)), t))
+R["arms"] = {}
+for a, ts in arms.items():
+    oks = [OK[t][0] for _, t in ts]; toks = [OK[t][1] for _, t in ts]; late = tyr >= 2022
+    r = {"seeds": [s_ for s_, _ in ts], "mean_exact_w": round(float(np.mean([wacc(o, np.arange(len(ids))) for o in oks])), 4), "mean_exact_unw": round(float(np.mean([o.mean() for o in oks])), 4),
+         "mean_test_agree": round(float(np.mean([x.mean() for x in toks])), 4), "mean_test_agree_>=2022": round(float(np.mean([x[late].mean() for x in toks])), 4),
+         "n_train": [R["tags"][t].get("train_log", {}).get("n_train") for _, t in ts]}
+    for ref, name in ((lambda s_: REF, f"minus_{REF}"), (lambda s_: f"mbb32_s{s_}", "minus_mbb32_seedmatched")):
+        if all(ref(s_) in OK for s_, _ in ts) and a != "mbb32":
+            d = [np.mean([wacc(o, ix) - wacc(OK[ref(s_)][0], ix) for (s_, _), o in zip(ts, oks)]) for ix in BS]
+            dt = [np.mean([x[ix[late[ix]]].mean() - OK[ref(s_)][1][ix[late[ix]]].mean() for (s_, _), x in zip(ts, toks)]) for ix in TBS]
+            r[name + "_479"] = {"point": round(float(np.mean(d)), 4), "ci": ci(d)}; r[name + "_test>=2022"] = {"point": round(float(np.mean(dt)), 4), "ci": ci(dt)}
+    R["arms"][a] = r
+    print(f"ARM {a:12s} seeds {r['seeds']} n_train {r['n_train']} mean 479 {100*r['mean_exact_w']:.1f} (unw {100*r['mean_exact_unw']:.1f}) test {100*r['mean_test_agree']:.1f} (>=22 {100*r['mean_test_agree_>=2022']:.1f})"
+          + "".join(f" | {k[6:]}: {100*v['point']:+.1f} {[round(100*x,1) for x in v['ci']]}" for k, v in r.items() if k.startswith("minus_")))
 json.dump(R, open(O + "/curve_metrics.json", "w"), indent=1); os.chmod(O + "/curve_metrics.json", 0o600)
 for t, r in R["tags"].items():
     L = r.get("train_log", {}); d = r.get(f"minus_{REF}_479", {}); dt = r.get(f"minus_{REF}_test>=2022", {})

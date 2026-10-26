@@ -109,3 +109,20 @@ if os.path.exists(cs):
 else:
     print("no copy_scatter.json; skipped figure d")
 print("FIGS DONE ->", OUT)
+
+# (a3) thinking-mode runs on the 1-in-4 perturbation subsample, every comparator re-scored on the same pairs
+rs = f"{R}/results_sub.json"
+if os.path.exists(rs):
+    S = json.load(open(rs))["results"]
+    LABEL.update({"zs_nothink": "Qwen3-8B zero-shot, no thinking", "think_plain": "Qwen3-8B thinking, zero-shot",
+                  "think_r": "Qwen3-8B thinking + retrieval sentence", "sft_r": "SFT on the retrieval sentence (non-thinking)",
+                  "knn_mean_k10": "kNN k10 (= the retrieval sentence)"})
+    res_full = res; res = S
+    fig, axes = plt.subplots(1, 2, figsize=(10.6, 3.6)); fig.subplots_adjust(wspace=0.70)
+    dumbbell(axes[0], list(S), "DE_raw", "DE_2w", "a3-1  DE, 1-in-4 perturbation subsample")
+    dumbbell(axes[1], list(S), "DIR_raw", "DIR_2w", "a3-2  Direction, same subsample")
+    for ax in axes: ax.set_xlim(0.40, 0.86)
+    fig.legend(handles=h, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.1))
+    fig.savefig(f"{OUT}/fig_a3_thinking_subsample.png"); plt.close(fig); res = res_full
+else:
+    print("no results_sub.json; skipped figure a3")

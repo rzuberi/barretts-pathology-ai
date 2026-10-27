@@ -18,6 +18,8 @@ case $ST in
   full)       TAG=full_s$1 SEED=$1 FOLD=-1 TEACHER=jury SAVE=1 python train_enc.py ;;   # saved weights for the frozen-encoder external tests
   db)         python db_encoder.py ;;
   db_smoke)   TAGS=full_s0 N=200 OUTSUB=smoke python db_encoder.py ;;
+  db_sft)     BASE=$BASE python db_sft.py ;;   # masked-SFT MedGemma LoRAs on the same DB reports
+  db_sft_smoke) BASE=$BASE N=200 OUTSUB=smoke python db_sft.py ;;
   chain_lc)   for f in 0.05 0.1 0.25 0.5; do TAG=lc${f}_s$1 SEED=$1 FRAC=$f python train_enc.py; done
               for f in 0.05 0.1; do TAG=lc${f}e12_s$1 SEED=$1 FRAC=$f EPOCHS=12 python train_enc.py; done
               TAG=y21_s$1 SEED=$1 YEAR_MAX=21 python train_enc.py ;;
